@@ -1,0 +1,95 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── Node / React ─────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+
+# ─── Environment & Secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+keystore/
+wallet/
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+.docker/
+
+# ─── Blockchain ───────────────────────────────────────────────────────────────
+artifacts/
+cache/
+typechain/
+typechain-types/
+deployments/localhost/
+
+# ─── Datasets (large files) ───────────────────────────────────────────────────
+module_a_vision/datasets/raw/
+module_a_vision/datasets/processed/
+*.zip
+*.tar.gz
+*.h5
+*.pkl
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+
+# ─── IDE / OS ─────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── MongoDB ──────────────────────────────────────────────────────────────────
+data/db/
+
+# ─── IPFS ─────────────────────────────────────────────────────────────────────
+.ipfs/
+ipfs_data/
+
+# ─── Test Coverage ────────────────────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+coverage/
+*.lcov

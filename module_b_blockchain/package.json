@@ -1,0 +1,31 @@
+{
+    "name": "supply-chain-blockchain",
+    "version": "1.0.0",
+    "description": "Module B: Blockchain & Smart Contracts — Supply Chain Integrity",
+    "scripts": {
+        "compile": "hardhat compile",
+        "test": "hardhat test",
+        "test:coverage": "hardhat coverage",
+        "node": "hardhat node --hostname 0.0.0.0",
+        "deploy": "hardhat run scripts/deploy.js --network localhost",
+        "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+        "verify": "hardhat run scripts/verify_shipment.js --network localhost",
+        "benchmark": "node scripts/benchmark.js",
+        "lint": "npx solhint 'contracts/**/*.sol'",
+        "clean": "hardhat clean"
+    },
+    "devDependencies": {
+        "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+        "@openzeppelin/contracts": "^5.0.1",
+        "hardhat": "^2.20.1",
+        "hardhat-gas-reporter": "^1.0.10",
+        "solhint": "^4.5.4",
+        "chai": "^4.4.1",
+        "dotenv": "^16.4.1"
+    },
+    "dependencies": {
+        "ethers": "^6.11.1",
+        "ipfs-http-client": "^60.0.1",
+        "axios": "^1.6.7"
+    }
+}

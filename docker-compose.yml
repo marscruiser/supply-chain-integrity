@@ -1,0 +1,165 @@
+version: '3.9'
+
+networks:
+  supply_chain_net:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  ipfs_data:
+  ipfs_staging:
+  blockchain_data:
+
+
+services:
+
+  # ─── MongoDB ──────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: scs_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./module_c_integration/database/init:/docker-entrypoint-initdb.d
+    networks:
+      - supply_chain_net
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── IPFS Node ────────────────────────────────────────────────────────────
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: scs_ipfs
+    restart: unless-stopped
+    ports:
+      - "4001:4001" # swarm
+      - "5001:5001" # API
+      - "8080:8080" # Gateway
+    volumes:
+      - ipfs_staging:/export
+      - ipfs_data:/data/ipfs
+    networks:
+      - supply_chain_net
+    environment:
+      - IPFS_PROFILE=server
+
+  # ─── Hardhat / Local Ethereum Blockchain ──────────────────────────────────
+  hardhat_node:
+    build:
+      context: ./module_b_blockchain
+      dockerfile: Dockerfile.hardhat
+    container_name: scs_hardhat
+    restart: unless-stopped
+    ports:
+      - "8545:8545"
+    volumes:
+      - blockchain_data:/app/data
+    networks:
+      - supply_chain_net
+    command: npx hardhat node --hostname 0.0.0.0
+
+  # ─── Vision API (Module A) ────────────────────────────────────────────────
+  vision_api:
+    build:
+      context: ./module_a_vision
+      dockerfile: Dockerfile
+    container_name: scs_vision
+    restart: unless-stopped
+    environment:
+      - VISION_PORT=${VISION_PORT:-8001}
+      - DATASET_PATH=/app/datasets/raw
+      - PROCESSED_PATH=/app/datasets/processed
+      - PHASH_THRESHOLD=${PHASH_THRESHOLD:-10}
+      - SSIM_THRESHOLD=${SSIM_THRESHOLD:-0.85}
+    ports:
+      - "${VISION_PORT:-8001}:8001"
+    volumes:
+      - ./module_a_vision/datasets:/app/datasets
+    networks:
+      - supply_chain_net
+    depends_on:
+      - ipfs
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Main FastAPI Backend (Module C) ─────────────────────────────────────
+  api:
+    build:
+      context: ./module_c_integration/api
+      dockerfile: Dockerfile
+    container_name: scs_api
+    restart: unless-stopped
+    environment:
+      - API_PORT=${API_PORT:-8000}
+      - MONGODB_URI=mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@mongodb:27017/${MONGODB_DB_NAME}?authSource=admin
+      - IPFS_HOST=ipfs
+      - IPFS_PORT=5001
+      - ETH_RPC_URL=http://hardhat_node:8545
+      - VISION_API_URL=http://vision_api:8001
+      - JWT_SECRET=${JWT_SECRET}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./module_c_integration/api:/app
+    networks:
+      - supply_chain_net
+    depends_on:
+      - mongodb
+      - ipfs
+      - hardhat_node
+      - vision_api
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── React Dashboard (Module C) ──────────────────────────────────────────
+  dashboard:
+    build:
+      context: ./module_c_integration/dashboard
+      dockerfile: Dockerfile
+    container_name: scs_dashboard
+    restart: unless-stopped
+    environment:
+      - VITE_API_BASE_URL=http://localhost:${API_PORT:-8000}/api/v1
+      - VITE_WS_URL=ws://localhost:${API_PORT:-8000}/ws
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./module_c_integration/dashboard/src:/app/src
+      - ./module_c_integration/dashboard/public:/app/public
+      - ./module_c_integration/dashboard/index.html:/app/index.html
+    networks:
+      - supply_chain_net
+    depends_on:
+      - api
+
+  # ─── Mongo Express (Admin UI) ─────────────────────────────────────────────
+  mongo_express:
+    image: mongo-express:latest
+    container_name: scs_mongo_express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGODB_USER}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGODB_PASSWORD}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@mongodb:27017/
+      ME_CONFIG_BASICAUTH: "false"
+    networks:
+      - supply_chain_net
+    depends_on:
+      - mongodb
