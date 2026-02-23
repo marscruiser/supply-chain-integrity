@@ -1,4 +1,5 @@
 # 🔐 Supply Chain Integrity System
+## Version 0.3.0
 ## Ensuring Supply Chain Integrity through 3D X-Ray Data Analysis, Perceptual Fingerprinting, and Blockchain Integration
 
 > **Final Year B.Tech Project** | Department of Computer Science & Engineering
