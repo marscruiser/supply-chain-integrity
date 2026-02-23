@@ -16,32 +16,35 @@ const path = require("path");
 async function main() {
     const [deployer] = await ethers.getSigners();
     const network = await ethers.provider.getNetwork();
+    const balance = await ethers.provider.getBalance(deployer.address);
 
     console.log("════════════════════════════════════════════════");
     console.log("   Supply Chain Integrity — Contract Deployment");
     console.log("════════════════════════════════════════════════");
     console.log(`Network:   ${network.name} (chainId: ${network.chainId})`);
     console.log(`Deployer:  ${deployer.address}`);
-    console.log(`Balance:   ${ethers.utils.formatEther(await deployer.getBalance())} ETH`);
+    console.log(`Balance:   ${ethers.formatEther(balance)} ETH`);
     console.log("");
 
     // ── Deploy SupplyChainIntegrity ──────────────────────────────────────────
     console.log("Deploying SupplyChainIntegrity...");
     const SupplyChainIntegrity = await ethers.getContractFactory("SupplyChainIntegrity");
     const supplyChain = await SupplyChainIntegrity.deploy();
-    await supplyChain.deployed();
-    console.log(`✅ SupplyChainIntegrity deployed at: ${supplyChain.address}`);
+    await supplyChain.waitForDeployment();
+    const supplyChainAddr = await supplyChain.getAddress();
+    console.log(`✅ SupplyChainIntegrity deployed at: ${supplyChainAddr}`);
 
     // ── Deploy InspectionRegistry ────────────────────────────────────────────
     console.log("Deploying InspectionRegistry...");
     const InspectionRegistry = await ethers.getContractFactory("InspectionRegistry");
     const registry = await InspectionRegistry.deploy();
-    await registry.deployed();
-    console.log(`✅ InspectionRegistry deployed at: ${registry.address}`);
+    await registry.waitForDeployment();
+    const registryAddr = await registry.getAddress();
+    console.log(`✅ InspectionRegistry deployed at: ${registryAddr}`);
 
     // ── Grant Registry Roles ─────────────────────────────────────────────────
-    const REGISTRAR_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("REGISTRAR_ROLE"));
-    await registry.grantRole(REGISTRAR_ROLE, supplyChain.address);
+    const REGISTRAR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("REGISTRAR_ROLE"));
+    await registry.grantRole(REGISTRAR_ROLE, supplyChainAddr);
     console.log("✅ Granted REGISTRAR_ROLE to SupplyChainIntegrity");
 
     // ── Save Addresses ───────────────────────────────────────────────────────
@@ -51,8 +54,8 @@ async function main() {
         deployedAt: new Date().toISOString(),
         deployer: deployer.address,
         contracts: {
-            SupplyChainIntegrity: supplyChain.address,
-            InspectionRegistry: registry.address,
+            SupplyChainIntegrity: supplyChainAddr,
+            InspectionRegistry: registryAddr,
         }
     };
 

@@ -107,6 +107,7 @@ services:
       - IPFS_HOST=ipfs
       - IPFS_PORT=5001
       - ETH_RPC_URL=http://hardhat_node:8545
+      - ETH_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
       - VISION_API_URL=http://vision_api:8001
       - JWT_SECRET=${JWT_SECRET}
     ports:

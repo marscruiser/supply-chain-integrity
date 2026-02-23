@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.24;
 
 /**
  * @title SupplyChainIntegrity
@@ -19,12 +19,10 @@ pragma solidity ^0.8.19;
  */
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
-    using Counters for Counters.Counter;
 
     // ─── Roles ────────────────────────────────────────────────────────────────
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -62,7 +60,7 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
         bytes32 imageHash;          // SHA-256 of raw X-ray image (bytes32)
         string pHash;               // Perceptual hash hex string
         string ipfsCID;             // IPFS content identifier for full data
-        uint32 ssimScoreX10000;     // SSIM * 10000 (e.g., 9750 = 0.9750) - no floats in Solidity
+        uint32 ssimScoreX10000;     // SSIM * 10000 (e.g., 9750 = 0.9750)
         uint32 hammingDistance;     // pHash Hamming distance (0 if origin)
         IntegrityVerdict verdict;
         address inspector;
@@ -74,14 +72,14 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
         uint256 shipmentId;
         string shipmentCode;        // Human-readable code (e.g., "SHP-2025-001")
         address originator;
-        address currentHolder;      // Logistics party currently holding it
+        address currentHolder;
         ShipmentStatus status;
         uint256 registeredAt;
         uint256 lastUpdatedAt;
-        uint256[] inspectionIds;    // All inspection record IDs
-        string originFingerprintCID; // IPFS CID of origin fingerprint
-        bytes32 originImageHash;    // SHA-256 of origin X-ray image
-        string originPHash;         // Origin perceptual hash
+        uint256[] inspectionIds;
+        string originFingerprintCID;
+        bytes32 originImageHash;
+        string originPHash;
         bool exists;
     }
 
@@ -91,29 +89,29 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
         uint256 inspectionId;
         uint32 hammingDistance;
         uint32 ssimScoreX10000;
-        string ipfsDiffCID;         // IPFS CID of visual diff report
+        string ipfsDiffCID;
         address detectedBy;
         uint256 timestamp;
     }
 
     // ─── State Variables ──────────────────────────────────────────────────────
-    Counters.Counter private _shipmentCounter;
-    Counters.Counter private _inspectionCounter;
-    Counters.Counter private _alertCounter;
+    uint256 private _shipmentCounter;
+    uint256 private _inspectionCounter;
+    uint256 private _alertCounter;
 
     mapping(uint256 => Shipment) public shipments;
-    mapping(string => uint256) public shipmentCodeToId;   // code => ID
+    mapping(string => uint256) public shipmentCodeToId;
     mapping(uint256 => InspectionRecord) public inspectionRecords;
     mapping(uint256 => TamperingAlert) public tamperingAlerts;
-    mapping(uint256 => uint256[]) public shipmentAlerts;  // shipmentId => alertIds
+    mapping(uint256 => uint256[]) public shipmentAlerts;
 
     uint256 public totalShipments;
     uint256 public totalInspections;
     uint256 public totalTamperingAlerts;
 
-    // Configuration
-    uint32 public pHashThreshold = 10;       // Hamming distance threshold
-    uint32 public ssimThresholdX10000 = 8500; // 0.85 * 10000
+    // Configuration thresholds
+    uint32 public pHashThreshold = 10;
+    uint32 public ssimThresholdX10000 = 8500; // 0.85
 
     // ─── Events ───────────────────────────────────────────────────────────────
     event ShipmentRegistered(uint256 indexed shipmentId, string shipmentCode, address indexed originator, uint256 timestamp);
@@ -148,35 +146,27 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
     function unpause() external onlyRole(ADMIN_ROLE) { _unpause(); }
 
     // ─── Shipment Registration ────────────────────────────────────────────────
-    /**
-     * @dev Register a new shipment before it is inspected.
-     */
-    function registerShipment(string calldata shipmentCode) 
-        external 
-        onlyRole(ORIGINATOR_ROLE) 
-        whenNotPaused 
-        returns (uint256) 
+    function registerShipment(string calldata shipmentCode)
+        external
+        onlyRole(ORIGINATOR_ROLE)
+        whenNotPaused
+        returns (uint256)
     {
         require(bytes(shipmentCode).length > 0, "Shipment code cannot be empty");
         require(shipmentCodeToId[shipmentCode] == 0, "Shipment code already registered");
 
-        _shipmentCounter.increment();
-        uint256 shipmentId = _shipmentCounter.current();
+        _shipmentCounter++;
+        uint256 shipmentId = _shipmentCounter;
 
-        shipments[shipmentId] = Shipment({
-            shipmentId: shipmentId,
-            shipmentCode: shipmentCode,
-            originator: msg.sender,
-            currentHolder: msg.sender,
-            status: ShipmentStatus.REGISTERED,
-            registeredAt: block.timestamp,
-            lastUpdatedAt: block.timestamp,
-            inspectionIds: new uint256[](0),
-            originFingerprintCID: "",
-            originImageHash: bytes32(0),
-            originPHash: "",
-            exists: true
-        });
+        Shipment storage s = shipments[shipmentId];
+        s.shipmentId = shipmentId;
+        s.shipmentCode = shipmentCode;
+        s.originator = msg.sender;
+        s.currentHolder = msg.sender;
+        s.status = ShipmentStatus.REGISTERED;
+        s.registeredAt = block.timestamp;
+        s.lastUpdatedAt = block.timestamp;
+        s.exists = true;
 
         shipmentCodeToId[shipmentCode] = shipmentId;
         totalShipments++;
@@ -186,19 +176,16 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
     }
 
     // ─── Origin Inspection ────────────────────────────────────────────────────
-    /**
-     * @dev Store the origin inspection hash — the "ground truth" fingerprint.
-     */
     function storeOriginInspection(
         uint256 shipmentId,
         bytes32 imageHash,
         string calldata pHash,
         string calldata ipfsCID,
         uint32 ssimScoreX10000
-    ) 
-        external 
+    )
+        external
         onlyRole(INSPECTOR_ROLE)
-        whenNotPaused 
+        whenNotPaused
         nonReentrant
         returns (uint256)
     {
@@ -207,8 +194,8 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
         require(bytes(ipfsCID).length > 0, "IPFS CID required");
         require(imageHash != bytes32(0), "Image hash required");
 
-        _inspectionCounter.increment();
-        uint256 recordId = _inspectionCounter.current();
+        _inspectionCounter++;
+        uint256 recordId = _inspectionCounter;
 
         inspectionRecords[recordId] = InspectionRecord({
             recordId: recordId,
@@ -225,7 +212,6 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
             notes: ""
         });
 
-        // Store origin fingerprint on shipment
         shipments[shipmentId].originImageHash = imageHash;
         shipments[shipmentId].originPHash = pHash;
         shipments[shipmentId].originFingerprintCID = ipfsCID;
@@ -240,10 +226,6 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
     }
 
     // ─── Destination Verification ─────────────────────────────────────────────
-    /**
-     * @dev Verify shipment at destination by comparing new hash to origin hash.
-     * Smart contract automatically determines verdict based on thresholds.
-     */
     function verifyDestinationInspection(
         uint256 shipmentId,
         bytes32 newImageHash,
@@ -252,10 +234,10 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
         uint32 newSsimScoreX10000,
         uint32 hammingDist,
         string calldata notes
-    ) 
-        external 
+    )
+        external
         onlyRole(VERIFIER_ROLE)
-        whenNotPaused 
+        whenNotPaused
         nonReentrant
         returns (uint256, IntegrityVerdict)
     {
@@ -276,8 +258,8 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
             verdict = IntegrityVerdict.TAMPERED;
         }
 
-        _inspectionCounter.increment();
-        uint256 recordId = _inspectionCounter.current();
+        _inspectionCounter++;
+        uint256 recordId = _inspectionCounter;
 
         inspectionRecords[recordId] = InspectionRecord({
             recordId: recordId,
@@ -299,9 +281,8 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
         totalInspections++;
 
         if (verdict == IntegrityVerdict.TAMPERED || verdict == IntegrityVerdict.SUSPICIOUS) {
-            // Create tampering alert
-            _alertCounter.increment();
-            uint256 alertId = _alertCounter.current();
+            _alertCounter++;
+            uint256 alertId = _alertCounter;
             tamperingAlerts[alertId] = TamperingAlert({
                 alertId: alertId,
                 shipmentId: shipmentId,
@@ -357,7 +338,7 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
     }
 
     function getShipmentCount() external view returns (uint256) {
-        return _shipmentCounter.current();
+        return _shipmentCounter;
     }
 
     function getSystemStats() external view returns (
