@@ -1,6 +1,6 @@
 {
     "name": "supply-chain-dashboard",
-    "version": "1.0.0",
+    "version": "1.4.0",
     "description": "Module C React Dashboard — Supply Chain Integrity Verification",
     "private": true,
     "scripts": {

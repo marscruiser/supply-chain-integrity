@@ -46,7 +46,7 @@ def create_app(config: APIConfig = None) -> FastAPI:
             "Integrates X-ray vision analysis, blockchain integrity logging, "
             "and IPFS decentralized storage."
         ),
-        version="1.0.0",
+        version="1.4.0",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,

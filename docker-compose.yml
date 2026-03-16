@@ -63,6 +63,9 @@ services:
       - "8545:8545"
     volumes:
       - blockchain_data:/app/data
+      - ./module_b_blockchain/contracts:/app/contracts
+      - ./module_b_blockchain/scripts:/app/scripts
+      - ./module_b_blockchain/hardhat.config.js:/app/hardhat.config.js
     networks:
       - supply_chain_net
     command: npx hardhat node --hostname 0.0.0.0
@@ -83,6 +86,7 @@ services:
     ports:
       - "${VISION_PORT:-8001}:8001"
     volumes:
+      - ./module_a_vision:/app
       - ./module_a_vision/datasets:/app/datasets
     networks:
       - supply_chain_net

@@ -1,6 +1,6 @@
 {
     "name": "supply-chain-blockchain",
-    "version": "1.0.0",
+    "version": "1.4.0",
     "description": "Module B: Blockchain & Smart Contracts — Supply Chain Integrity",
     "scripts": {
         "compile": "hardhat compile",

@@ -4,4 +4,4 @@ router = APIRouter()
 
 @router.get("/")
 async def health_check():
-    return {"status": "healthy", "module": "vision", "version": "1.0.0"}
+    return {"status": "healthy", "module": "vision", "version": "1.4.0"}
