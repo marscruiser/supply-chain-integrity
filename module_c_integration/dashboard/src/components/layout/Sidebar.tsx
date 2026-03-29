@@ -1,18 +1,30 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShieldCheck, Box, Microscope, Activity, Link as LinkIcon, Settings, Hexagon } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, ShieldCheck, Box, Microscope, Activity, Link as LinkIcon, Settings, Hexagon, LogOut } from 'lucide-react';
 
-const NAV = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/verify', label: 'Verify', icon: ShieldCheck },
-    { path: '/shipments', label: 'Shipments', icon: Box },
-    { path: '/inspections', label: 'Inspections', icon: Microscope },
-    { path: '/analytics', label: 'Analytics', icon: Activity },
-    { path: '/blockchain', label: 'Blockchain', icon: LinkIcon },
-    { path: '/settings', label: 'Settings', icon: Settings },
+const ALL_NAV = [
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'sender', 'inspector'] },
+    { path: '/verify', label: 'Verify', icon: ShieldCheck, roles: ['admin', 'sender', 'inspector'] },
+    { path: '/shipments', label: 'Shipments', icon: Box, roles: ['admin', 'sender'] },
+    { path: '/inspections', label: 'Inspections', icon: Microscope, roles: ['admin', 'sender', 'inspector'] },
+    { path: '/analytics', label: 'Analytics', icon: Activity, roles: ['admin'] },
+    { path: '/blockchain', label: 'Blockchain', icon: LinkIcon, roles: ['admin', 'sender', 'inspector'] },
+    { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
 ];
 
 export default function Sidebar() {
+    const navigate = useNavigate();
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const role = user.role || 'inspector';
+
+    const visibleNav = ALL_NAV.filter(item => item.roles.includes(role));
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+    };
+
     return (
         <nav className="sidebar">
             <div className="sidebar-header">
@@ -24,7 +36,7 @@ export default function Sidebar() {
             </div>
 
             <div className="sidebar-nav">
-                {NAV.map(item => {
+                {visibleNav.map(item => {
                     const Icon = item.icon;
                     return (
                         <NavLink
@@ -37,6 +49,23 @@ export default function Sidebar() {
                         </NavLink>
                     );
                 })}
+            </div>
+
+            {/* User info + Logout at bottom */}
+            <div style={{ marginTop: 'auto', padding: '1rem', borderTop: '1px solid var(--border-subtle)' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.email || 'Unknown'}</div>
+                    <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent-primary)' }}>
+                        {user.company || ''} · {role}
+                    </div>
+                </div>
+                <button onClick={handleLogout} style={{
+                    width: '100%', padding: '0.5rem', borderRadius: 6, border: '1px solid var(--border-subtle)',
+                    background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
+                    fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center',
+                }}>
+                    <LogOut size={14} /> Sign Out
+                </button>
             </div>
         </nav>
     );

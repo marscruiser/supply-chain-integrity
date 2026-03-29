@@ -62,6 +62,7 @@ def create_app(config: APIConfig = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(LoggingMiddleware)
+    app.add_middleware(AuthMiddleware)
 
     # Routers
     app.include_router(health.router,          prefix="/health",                tags=["Health"])
