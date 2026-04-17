@@ -16,7 +16,7 @@ from config import APIConfig
 from database.connection import connect_db, disconnect_db
 from routes import (
     shipments, inspections, verification,
-    fingerprints, health, auth, websocket, reports, blockchain
+    fingerprints, health, auth, websocket, reports, blockchain, disputes
 )
 from middleware.logging_middleware import LoggingMiddleware
 from middleware.auth_middleware import AuthMiddleware
@@ -73,6 +73,7 @@ def create_app(config: APIConfig = None) -> FastAPI:
     app.include_router(fingerprints.router,    prefix="/api/v1/fingerprints",   tags=["Fingerprints"])
     app.include_router(reports.router,         prefix="/api/v1/reports",        tags=["Reports"])
     app.include_router(blockchain.router,      prefix="/api/v1/blockchain",     tags=["Blockchain"])
+    app.include_router(disputes.router,        prefix="/api/v1/disputes",       tags=["Disputes"])
     app.include_router(websocket.router,       prefix="/ws",                    tags=["WebSocket"])
 
     return app

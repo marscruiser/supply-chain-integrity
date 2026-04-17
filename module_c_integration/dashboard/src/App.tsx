@@ -15,6 +15,7 @@ const Inspections = lazy(() => import('./pages/Inspections'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Blockchain = lazy(() => import('./pages/Blockchain'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Disputes = lazy(() => import('./pages/Disputes'));
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -60,6 +61,7 @@ export default function App() {
                                             <Route path="/analytics" element={<Analytics />} />
                                             <Route path="/blockchain" element={<Blockchain />} />
                                             <Route path="/settings" element={<Settings />} />
+                                            <Route path="/disputes" element={<Disputes />} />
                                             <Route path="*" element={<Navigate to="/dashboard" replace />} />
                                         </Routes>
                                     </Layout>

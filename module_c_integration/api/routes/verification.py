@@ -167,6 +167,19 @@ async def verify_destination(
     if not shipment:
         raise HTTPException(404, "Shipment not found")
 
+    # ── Verify count limit: 1 attempt, then must dispute ──────────────────
+    verify_counts = db["verify_counts"]
+    count_doc = await verify_counts.find_one({"shipment_id": shipment_id})
+    current_count = count_doc["count"] if count_doc else 0
+
+    if current_count >= 1:
+        raise HTTPException(
+            403,
+            "You have already verified this shipment once. "
+            "If you believe the result is incorrect, please raise a Dispute."
+        )
+
+
     # Check origin scan exists
     origin_path = ORIGIN_IMAGES_DIR / f"{shipment_id}.png"
     if not origin_path.exists():
@@ -251,6 +264,13 @@ async def verify_destination(
     # Update shipment status
     new_status = "TAMPERED" if verdict == "TAMPERED" else "VERIFIED"
     await shipment_repo.update_status(shipment_id, new_status)
+
+    # Increment verify count (1 attempt per shipment unless dispute approved)
+    await verify_counts.update_one(
+        {"shipment_id": shipment_id},
+        {"$inc": {"count": 1}, "$setOnInsert": {"shipment_id": shipment_id}},
+        upsert=True,
+    )
 
     return {
         "shipment_id": shipment_id,

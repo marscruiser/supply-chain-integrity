@@ -308,6 +308,158 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
         return (recordId, verdict);
     }
 
+    // ─── In-Transit Inspection ─────────────────────────────────────────────
+    function storeInTransitInspection(
+        uint256 shipmentId,
+        bytes32 imageHash,
+        string calldata pHash,
+        string calldata ipfsCID,
+        uint32 ssimScoreX10000,
+        string calldata notes
+    )
+        external
+        onlyRole(INSPECTOR_ROLE)
+        whenNotPaused
+        nonReentrant
+        returns (uint256)
+    {
+        require(shipments[shipmentId].exists, "Shipment not found");
+        require(
+            shipments[shipmentId].status == ShipmentStatus.ORIGIN_INSPECTED ||
+            shipments[shipmentId].status == ShipmentStatus.IN_TRANSIT,
+            "Shipment not ready for in-transit inspection"
+        );
+
+        _inspectionCounter++;
+        uint256 recordId = _inspectionCounter;
+
+        inspectionRecords[recordId] = InspectionRecord({
+            recordId: recordId,
+            shipmentId: shipmentId,
+            inspectionType: InspectionType.IN_TRANSIT,
+            imageHash: imageHash,
+            pHash: pHash,
+            ipfsCID: ipfsCID,
+            ssimScoreX10000: ssimScoreX10000,
+            hammingDistance: 0,
+            verdict: IntegrityVerdict.CLEAN,
+            inspector: msg.sender,
+            timestamp: block.timestamp,
+            notes: notes
+        });
+
+        shipments[shipmentId].status = ShipmentStatus.IN_TRANSIT;
+        shipments[shipmentId].lastUpdatedAt = block.timestamp;
+        shipments[shipmentId].inspectionIds.push(recordId);
+        totalInspections++;
+
+        emit InspectionAdded(shipmentId, recordId, InspectionType.IN_TRANSIT, block.timestamp);
+        return recordId;
+    }
+
+    // ─── Dispute System ──────────────────────────────────────────────────────
+    enum DisputeStatus { PENDING, APPROVED, REJECTED }
+
+    struct Dispute {
+        uint256 disputeId;
+        uint256 shipmentId;
+        uint256 inspectionId;
+        address disputedBy;
+        string reason;
+        DisputeStatus status;
+        address resolvedBy;
+        uint256 createdAt;
+        uint256 resolvedAt;
+    }
+
+    uint256 private _disputeCounter;
+    mapping(uint256 => Dispute) public disputes;
+    mapping(uint256 => uint256) public activeDisputeForShipment;  // shipmentId => disputeId (0 = none)
+    uint256 public totalDisputes;
+
+    event DisputeRaised(uint256 indexed disputeId, uint256 indexed shipmentId, address indexed disputedBy, string reason, uint256 timestamp);
+    event DisputeResolved(uint256 indexed disputeId, uint256 indexed shipmentId, DisputeStatus status, address resolvedBy, uint256 timestamp);
+
+    /**
+     * @dev Inspector raises a dispute after a TAMPERED verdict.
+     *      Sets shipment status to DISPUTED. Only 1 active dispute per shipment.
+     */
+    function raiseDispute(
+        uint256 shipmentId,
+        uint256 inspectionId,
+        string calldata reason
+    )
+        external
+        onlyRole(VERIFIER_ROLE)
+        whenNotPaused
+        returns (uint256)
+    {
+        require(shipments[shipmentId].exists, "Shipment not found");
+        require(
+            shipments[shipmentId].status == ShipmentStatus.TAMPERED ||
+            shipments[shipmentId].status == ShipmentStatus.DESTINATION_VERIFIED,
+            "Can only dispute after verification"
+        );
+        require(activeDisputeForShipment[shipmentId] == 0, "Active dispute already exists");
+
+        _disputeCounter++;
+        uint256 disputeId = _disputeCounter;
+
+        disputes[disputeId] = Dispute({
+            disputeId: disputeId,
+            shipmentId: shipmentId,
+            inspectionId: inspectionId,
+            disputedBy: msg.sender,
+            reason: reason,
+            status: DisputeStatus.PENDING,
+            resolvedBy: address(0),
+            createdAt: block.timestamp,
+            resolvedAt: 0
+        });
+
+        activeDisputeForShipment[shipmentId] = disputeId;
+        shipments[shipmentId].status = ShipmentStatus.DISPUTED;
+        shipments[shipmentId].lastUpdatedAt = block.timestamp;
+        totalDisputes++;
+
+        emit DisputeRaised(disputeId, shipmentId, msg.sender, reason, block.timestamp);
+        return disputeId;
+    }
+
+    /**
+     * @dev Sender (originator) resolves a dispute.
+     *      If approved, shipment reverts to ORIGIN_INSPECTED so inspector can re-verify.
+     *      If rejected, shipment goes back to TAMPERED.
+     */
+    function resolveDispute(
+        uint256 disputeId,
+        bool approved
+    )
+        external
+        onlyRole(ORIGINATOR_ROLE)
+        whenNotPaused
+    {
+        Dispute storage d = disputes[disputeId];
+        require(d.disputeId != 0, "Dispute not found");
+        require(d.status == DisputeStatus.PENDING, "Dispute already resolved");
+
+        if (approved) {
+            d.status = DisputeStatus.APPROVED;
+            // Reset shipment to allow re-verification
+            shipments[d.shipmentId].status = ShipmentStatus.ORIGIN_INSPECTED;
+        } else {
+            d.status = DisputeStatus.REJECTED;
+            shipments[d.shipmentId].status = ShipmentStatus.TAMPERED;
+        }
+
+        d.resolvedBy = msg.sender;
+        d.resolvedAt = block.timestamp;
+        activeDisputeForShipment[d.shipmentId] = 0;
+        shipments[d.shipmentId].lastUpdatedAt = block.timestamp;
+
+        emit DisputeResolved(disputeId, d.shipmentId, d.status, msg.sender, block.timestamp);
+    }
+
     // ─── View Functions ───────────────────────────────────────────────────────
     function getShipment(uint256 shipmentId) external view returns (Shipment memory) {
         require(shipments[shipmentId].exists, "Shipment not found");
@@ -335,6 +487,14 @@ contract SupplyChainIntegrity is AccessControl, Pausable, ReentrancyGuard {
 
     function getTamperingAlert(uint256 alertId) external view returns (TamperingAlert memory) {
         return tamperingAlerts[alertId];
+    }
+
+    function getDispute(uint256 disputeId) external view returns (Dispute memory) {
+        return disputes[disputeId];
+    }
+
+    function getActiveDispute(uint256 shipmentId) external view returns (uint256) {
+        return activeDisputeForShipment[shipmentId];
     }
 
     function getShipmentCount() external view returns (uint256) {

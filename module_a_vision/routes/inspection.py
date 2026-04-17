@@ -58,6 +58,156 @@ def _histogram_chi2(img1: np.ndarray, img2: np.ndarray) -> float:
     return float(cv2.compareHist(h1, h2, cv2.HISTCMP_CHISQR))
 
 
+def _detect_duplicated_objects(
+    origin_img: np.ndarray,
+    dest_img: np.ndarray,
+    min_area: int = 50,
+    match_threshold: float = 0.60,
+    nms_overlap: float = 0.3,
+) -> list:
+    """
+    Duplication detector optimised for X-ray luggage images.
+
+    Strategy (difference-first):
+      1. Compute |origin − destination| to isolate what changed.
+      2. Threshold the diff to find new/changed regions.
+      3. For each changed region, crop a template from the destination.
+      4. Count how many times that template appears in origin vs destination.
+      5. If destination_count > origin_count → object was duplicated.
+
+    This avoids trying to segment individual items inside an X-ray bag
+    (which fails because objects overlap heavily).
+    """
+    # ── normalise to uint8 grayscale ─────────────────────────────────────
+    def _to_gray_u8(img):
+        u8 = (img * 255).astype(np.uint8) if img.dtype in (np.float32, np.float64) else img
+        return cv2.cvtColor(u8, cv2.COLOR_BGR2GRAY) if len(u8.shape) == 3 else u8
+
+    g1 = _to_gray_u8(origin_img)
+    g2 = _to_gray_u8(dest_img)
+
+    # Resize to match if needed
+    if g1.shape != g2.shape:
+        g2 = cv2.resize(g2, (g1.shape[1], g1.shape[0]))
+
+    # CLAHE for better contrast
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    e1 = clahe.apply(g1)
+    e2 = clahe.apply(g2)
+
+    # ── Step 1: Absolute difference ──────────────────────────────────────
+    diff = cv2.absdiff(e1, e2)
+    # Enhance the diff
+    diff_blur = cv2.GaussianBlur(diff, (5, 5), 0)
+    _, diff_thresh = cv2.threshold(diff_blur, 15, 255, cv2.THRESH_BINARY)
+
+    # Morphological ops to get clean regions
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    diff_clean = cv2.morphologyEx(diff_thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
+    diff_clean = cv2.morphologyEx(diff_clean, cv2.MORPH_OPEN, kernel, iterations=1)
+
+    # ── Step 2: Find changed regions ─────────────────────────────────────
+    contours, _ = cv2.findContours(diff_clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    duplicated = []
+    obj_idx = 0
+    seen_boxes = []
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < min_area:
+            continue
+
+        x, y, w, h = cv2.boundingRect(cnt)
+
+        if w < 10 or h < 10:
+            continue
+        if w > e1.shape[1] * 0.5 or h > e1.shape[0] * 0.5:
+            continue
+
+        # Skip overlapping regions
+        skip = False
+        for sx, sy, sw, sh in seen_boxes:
+            ox = max(0, min(x+w, sx+sw) - max(x, sx))
+            oy = max(0, min(y+h, sy+sh) - max(y, sy))
+            if ox * oy > 0.4 * min(w*h, sw*sh):
+                skip = True
+                break
+        if skip:
+            continue
+        seen_boxes.append((x, y, w, h))
+
+        obj_idx += 1
+
+        # ── Step 3: Template from the DESTINATION (where new object is) ──
+        template = e2[y:y+h, x:x+w]
+        if template.size == 0:
+            continue
+
+        # ── Step 4: Count matches in origin vs destination ───────────────
+        origin_count = _count_template_matches(e1, template, match_threshold, nms_overlap, w, h)
+        dest_count = _count_template_matches(e2, template, match_threshold, nms_overlap, w, h)
+
+        if dest_count > origin_count and dest_count >= 2:
+            duplicated.append({
+                "object_id": obj_idx,
+                "origin_count": origin_count,
+                "destination_count": dest_count,
+                "times_duplicated": dest_count - origin_count,
+                "confidence": round(match_threshold, 4),
+                "bbox_origin": {"x": int(x), "y": int(y), "w": int(w), "h": int(h)},
+            })
+
+    return duplicated
+
+
+def _count_template_matches(
+    image: np.ndarray, template: np.ndarray,
+    threshold: float, nms_overlap: float, w: int, h: int,
+) -> int:
+    """Count how many times a template appears in an image."""
+    if template.shape[0] > image.shape[0] or template.shape[1] > image.shape[1]:
+        return 0
+    try:
+        result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
+    except cv2.error:
+        return 0
+
+    locations = np.where(result >= threshold)
+    match_points = list(zip(locations[1].tolist(), locations[0].tolist()))
+
+    if len(match_points) == 0:
+        return 0
+
+    boxes = [(mx, my, mx + w, my + h) for mx, my in match_points]
+    scores = [float(result[my, mx]) for mx, my in match_points]
+    keep = _nms(boxes, scores, nms_overlap)
+    return len(keep)
+
+
+def _nms(boxes: list, scores: list, overlap_thresh: float) -> list:
+    """Simple non-maximum suppression."""
+    if len(boxes) == 0:
+        return []
+    idxs = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    keep = []
+    while idxs:
+        i = idxs.pop(0)
+        keep.append(i)
+        remaining = []
+        bx1, by1, bx2, by2 = boxes[i]
+        for j in idxs:
+            ax1, ay1, ax2, ay2 = boxes[j]
+            ix1, ix2 = max(bx1, ax1), min(bx2, ax2)
+            iy1, iy2 = max(by1, ay1), min(by2, ay2)
+            inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+            area_j = (ax2 - ax1) * (ay2 - ay1)
+            if area_j > 0 and inter / area_j < overlap_thresh:
+                remaining.append(j)
+        idxs = remaining
+    return keep
+
+
 @router.post("/analyze", summary="Analyze a single X-ray image")
 async def analyze_image(request: Request, image: UploadFile = File(...), shipment_id: str = None):
     """
@@ -187,10 +337,16 @@ async def compare_images(
         if obj_delta >= 1:
             final_verdict = "TAMPERED"
             triggered.append("object_count_delta")
-            explanation_parts.append(
-                f"Object count changed from {obj_count_1} to {obj_count_2} "
-                f"(delta={obj_delta}). Items were removed or added."
-            )
+            if obj_count_2 > obj_count_1:
+                explanation_parts.append(
+                    f"Object count increased from {obj_count_1} to {obj_count_2} "
+                    f"(+{obj_count_2 - obj_count_1}). Items were multiplied/duplicated in the shipment."
+                )
+            else:
+                explanation_parts.append(
+                    f"Object count decreased from {obj_count_1} to {obj_count_2} "
+                    f"(-{obj_count_1 - obj_count_2}). Items were removed from the shipment."
+                )
 
         # ── Rule 2: Large histogram shift → material composition changed ──────
         # A chi² > 5.0 means significant material was removed/added.
@@ -266,6 +422,31 @@ async def compare_images(
                     f"Likely item removal or theft."
                 )
 
+        # ── Rule 5: Object duplication detection via template matching ────────
+        # Use RAW images (not preprocessed) — the preprocessing pipeline
+        # normalises contrast which hurts template-matching accuracy.
+        try:
+            raw1 = cv2.imread(path1, cv2.IMREAD_GRAYSCALE)
+            raw2 = cv2.imread(path2, cv2.IMREAD_GRAYSCALE)
+            if raw1 is not None and raw2 is not None:
+                duplicated_objects = _detect_duplicated_objects(raw1, raw2)
+            else:
+                duplicated_objects = _detect_duplicated_objects(proc1.image, proc2.image)
+        except Exception:
+            duplicated_objects = []
+
+        if duplicated_objects:
+            final_verdict = "TAMPERED"
+            triggered.append("object_duplication")
+            dup_details = "; ".join(
+                f"Object #{d['object_id']} multiplied {d['origin_count']}x → {d['destination_count']}x (+{d['times_duplicated']} copies)"
+                for d in duplicated_objects
+            )
+            explanation_parts.append(
+                f"Object duplication detected: {dup_details}. "
+                f"Items were cloned/duplicated in the destination scan."
+            )
+
         # ── Rule 4: SSIM below threshold → large-scale structural change ─────
         if ssim_result.is_suspicious:
             if final_verdict != "TAMPERED":
@@ -321,6 +502,10 @@ async def compare_images(
             "destination_sha256": fp2.image_sha256,
             "origin_phash":       str(fp1.perceptual_hashes.phash),
             "destination_phash":  str(fp2.perceptual_hashes.phash),
+
+            # Object duplication via template matching
+            "duplicated_objects": duplicated_objects,
+            "object_duplication_detected": len(duplicated_objects) > 0,
 
             "processing_time_ms": elapsed,
         }

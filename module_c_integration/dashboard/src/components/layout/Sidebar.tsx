@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShieldCheck, Box, Microscope, Activity, Link as LinkIcon, Settings, Hexagon, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShieldCheck, Box, Microscope, Activity, Link as LinkIcon, Settings, Hexagon, LogOut, Scale } from 'lucide-react';
 
 const ALL_NAV = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'sender', 'inspector'] },
     { path: '/verify', label: 'Verify', icon: ShieldCheck, roles: ['admin', 'sender', 'inspector'] },
     { path: '/shipments', label: 'Shipments', icon: Box, roles: ['admin', 'sender'] },
-    { path: '/inspections', label: 'Inspections', icon: Microscope, roles: ['admin', 'sender', 'inspector'] },
+    { path: '/inspections', label: 'Inspections', icon: Microscope, roles: ['admin', 'inspector'] },
+    { path: '/disputes', label: 'Disputes', icon: Scale, roles: ['admin', 'sender', 'inspector'] },
     { path: '/analytics', label: 'Analytics', icon: Activity, roles: ['admin'] },
     { path: '/blockchain', label: 'Blockchain', icon: LinkIcon, roles: ['admin', 'sender', 'inspector'] },
     { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },

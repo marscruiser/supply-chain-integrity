@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -14,6 +15,7 @@ interface Shipment {
 }
 
 export default function Verify() {
+    const navigate = useNavigate();
     const [shipments, setShipments] = useState<Shipment[]>([]);
     const [selectedId, setSelectedId] = useState('');
     const [mode, setMode] = useState<'origin' | 'destination'>('origin');
@@ -23,6 +25,9 @@ export default function Verify() {
     const [address, setAddress] = useState('');
     const [city, setCity] = useState('');
     const [country, setCountry] = useState('');
+    const [showDispute, setShowDispute] = useState(false);
+    const [disputeReason, setDisputeReason] = useState('');
+    const [disputing, setDisputing] = useState(false);
 
     const fetchShipments = useCallback(async () => {
         try {
@@ -69,7 +74,15 @@ export default function Verify() {
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || 'Verification failed');
+            if (!res.ok) {
+                // If 403 = "already verified, raise a dispute" — show dispute button
+                if (res.status === 403 && typeof data.detail === 'string' && data.detail.toLowerCase().includes('dispute')) {
+                    setResult({ verdict: 'TAMPERED', needsDispute: true, explanation: data.detail });
+                    toast.error(data.detail);
+                    return;
+                }
+                throw new Error(data.detail || 'Verification failed');
+            }
 
             setResult(data);
             toast.success(mode === 'origin' ? 'Origin scan stored!' : `Verdict: ${data.verdict}`);
@@ -310,6 +323,68 @@ export default function Verify() {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Dispute Button — shown after TAMPERED verdict for inspectors */}
+                            {result.verdict === 'TAMPERED' && (
+                                <div style={{ marginTop: '1rem' }}>
+                                    {!showDispute ? (
+                                        <button onClick={() => setShowDispute(true)} style={{
+                                            width: '100%', padding: '0.75rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)',
+                                            background: 'rgba(239,68,68,0.08)', color: '#f87171', cursor: 'pointer',
+                                            fontWeight: 600, fontSize: '0.85rem',
+                                        }}>🔴 Dispute This Result</button>
+                                    ) : (
+                                        <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.05)', borderRadius: 8, border: '1px solid rgba(239,68,68,0.15)' }}>
+                                            <label style={{ display: 'block', color: '#f87171', fontSize: '0.75rem', fontWeight: 600, marginBottom: 4 }}>REASON FOR DISPUTE</label>
+                                            <textarea
+                                                value={disputeReason}
+                                                onChange={e => setDisputeReason(e.target.value)}
+                                                placeholder="e.g., Scanner was miscalibrated, please allow re-scan"
+                                                style={{
+                                                    width: '100%', padding: '0.6rem', borderRadius: 6, minHeight: 60,
+                                                    border: '1px solid var(--border-subtle)', background: 'rgba(17,24,39,0.9)',
+                                                    color: 'var(--text-primary)', fontSize: '0.85rem', resize: 'vertical',
+                                                }}
+                                            />
+                                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                                <button
+                                                    disabled={disputing || !disputeReason.trim()}
+                                                    onClick={async () => {
+                                                        setDisputing(true);
+                                                        try {
+                                                            const res = await fetch(`${API_BASE}/disputes/${selectedId}`, {
+                                                                method: 'POST',
+                                                                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ reason: disputeReason }),
+                                                            });
+                                                            const data = await res.json();
+                                                            if (!res.ok) throw new Error(data.detail || 'Failed');
+                                                            toast.success('Dispute raised! Sender will review it.');
+                                                            setShowDispute(false);
+                                                            navigate('/disputes');
+                                                        } catch (err: any) {
+                                                            toast.error(err.message);
+                                                        }
+                                                        setDisputing(false);
+                                                    }}
+                                                    style={{
+                                                        flex: 1, padding: '0.6rem', borderRadius: 6, border: 'none',
+                                                        background: '#f87171', color: '#000', fontWeight: 700, cursor: 'pointer',
+                                                        opacity: disputing || !disputeReason.trim() ? 0.5 : 1,
+                                                    }}
+                                                >{disputing ? '⏳ Submitting...' : '⚖️ Submit Dispute'}</button>
+                                                <button
+                                                    onClick={() => { setShowDispute(false); setDisputeReason(''); }}
+                                                    style={{
+                                                        padding: '0.6rem 1rem', borderRadius: 6, border: '1px solid var(--border-subtle)',
+                                                        background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
+                                                    }}
+                                                >Cancel</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

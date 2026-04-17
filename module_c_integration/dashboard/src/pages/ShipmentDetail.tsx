@@ -38,6 +38,7 @@ export default function ShipmentDetail() {
     const navigate = useNavigate();
     const [shipment, setShipment] = useState<Shipment | null>(null);
     const [inspections, setInspections] = useState<Inspection[]>([]);
+    const [disputes, setDisputes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -53,6 +54,14 @@ export default function ShipmentDetail() {
                     const data = await insRes.json();
                     setInspections(data.inspections || []);
                 }
+                // Also fetch disputes for this shipment
+                try {
+                    const dRes = await fetch(`${API_BASE}/disputes/?limit=50`, { headers: authHeaders() });
+                    if (dRes.ok) {
+                        const dData = await dRes.json();
+                        setDisputes((dData.disputes || []).filter((d: any) => d.shipment_id === id));
+                    }
+                } catch { /* ignore */ }
             } catch (e) {
                 toast.error('Failed to load shipment');
             }
@@ -145,9 +154,30 @@ export default function ShipmentDetail() {
                             />
                         );
                     })}
+                    {/* Dispute events */}
+                    {disputes.map((d, i) => {
+                        const isPending = d.status === 'PENDING';
+                        const isApproved = d.status === 'APPROVED';
+                        return (
+                            <TimelineItem
+                                key={d._id}
+                                icon={isPending ? '⚖️' : (isApproved ? '✅' : '❌')}
+                                title={`Dispute ${d.status}`}
+                                subtitle={
+                                    <span>
+                                        Raised by <strong>{d.raised_by}</strong>
+                                        {d.resolved_by && <span style={{ color: 'var(--text-muted)' }}> · Resolved by {d.resolved_by}</span>}
+                                    </span>
+                                }
+                                date={d.resolved_at || d.created_at}
+                                color={isPending ? 'var(--accent-warning)' : (isApproved ? 'var(--accent-success)' : 'var(--accent-danger)')}
+                                isLast={i === disputes.length - 1 && inspections.length === 0}
+                            />
+                        );
+                    })}
                 </div>
 
-                {inspections.length === 0 && (
+                {inspections.length === 0 && disputes.length === 0 && (
                     <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem 0' }}>
                         No inspections yet. Upload origin scan on the Verify page.
                     </p>
@@ -264,6 +294,7 @@ function statusStyle(s: string) {
         case 'ORIGIN_SCANNED': return { bg: 'rgba(139,92,246,0.1)', color: '#a78bfa', border: 'rgba(139,92,246,0.2)' };
         case 'VERIFIED': return { bg: 'rgba(16,185,129,0.1)', color: '#34d399', border: 'rgba(16,185,129,0.2)' };
         case 'TAMPERED': return { bg: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'rgba(239,68,68,0.2)' };
+        case 'DISPUTED': return { bg: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: 'rgba(251,191,36,0.2)' };
         default: return { bg: 'rgba(255,255,255,0.05)', color: '#94a3b8', border: 'rgba(255,255,255,0.1)' };
     }
 }
