@@ -1,37 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { Scale, Check, X, Info } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 function getToken() { return localStorage.getItem('token') || ''; }
 function authHeaders(): Record<string, string> { return { Authorization: `Bearer ${getToken()}` }; }
 
 interface Dispute {
-    _id: string;
-    shipment_id: string;
-    shipment_code: string;
-    raised_by: string;
-    raised_by_company: string;
-    reason: string;
-    status: string;
-    resolved_by: string | null;
-    created_at: string;
-    resolved_at: string | null;
+    _id: string; shipment_id: string; shipment_code: string; raised_by: string;
+    raised_by_company: string; reason: string; status: string;
+    resolved_by: string | null; created_at: string; resolved_at: string | null;
 }
 
 export default function Disputes() {
     const [disputes, setDisputes] = useState<Dispute[]>([]);
     const [loading, setLoading] = useState(true);
     const [resolving, setResolving] = useState<string | null>(null);
-
     const user = JSON.parse(localStorage.getItem('user') || '{}');
 
     const fetchDisputes = useCallback(async () => {
         try {
             const res = await fetch(`${API_BASE}/disputes/?limit=100`, { headers: authHeaders() });
-            if (res.ok) {
-                const data = await res.json();
-                setDisputes(data.disputes || []);
-            }
+            if (res.ok) { const data = await res.json(); setDisputes(data.disputes || []); }
         } catch { /* ignore */ }
         setLoading(false);
     }, []);
@@ -42,137 +32,114 @@ export default function Disputes() {
         setResolving(disputeId);
         try {
             const res = await fetch(`${API_BASE}/disputes/${disputeId}/resolve`, {
-                method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ approved }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Failed');
-            toast.success(data.message);
-            fetchDisputes();
-        } catch (err: any) {
-            toast.error(err.message);
-        }
+            toast.success(data.message); fetchDisputes();
+        } catch (err: any) { toast.error(err.message); }
         setResolving(null);
     };
 
     const statusBadge = (s: string) => {
-        const map: Record<string, { bg: string; color: string; icon: string }> = {
-            'PENDING': { bg: 'rgba(251,191,36,0.1)', color: '#fbbf24', icon: '⏳' },
-            'APPROVED': { bg: 'rgba(16,185,129,0.1)', color: '#34d399', icon: '✅' },
-            'REJECTED': { bg: 'rgba(239,68,68,0.1)', color: '#f87171', icon: '❌' },
+        const map: Record<string, string> = {
+            PENDING: 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20',
+            APPROVED: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20',
+            REJECTED: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20',
         };
-        const st = map[s] || map['PENDING'];
-        return (
-            <span style={{
-                padding: '0.2rem 0.6rem', borderRadius: 9999, fontSize: '0.7rem',
-                fontWeight: 600, background: st.bg, color: st.color,
-            }}>{st.icon} {s}</span>
-        );
+        return <span className={`badge ${map[s] || map.PENDING}`}>{s}</span>;
     };
 
+    const canResolve = user.role === 'sender' || user.role === 'admin';
+
     return (
-        <div className="page">
-            <div className="page-header">
-                <h1 className="page-title">⚖️ Disputes</h1>
-                <p className="page-subtitle">
-                    {user.role === 'sender' || user.role === 'admin'
-                        ? 'Review and resolve inspector disputes on your shipments'
-                        : 'View your raised disputes and their resolution status'}
+        <div className="p-4 lg:p-6 max-w-7xl mx-auto animate-fade-in">
+            <div className="mb-6">
+                <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                    <Scale className="h-6 w-6 text-amber-400" /> Disputes
+                </h1>
+                <p className="text-sm text-gray-500 mt-1">
+                    {canResolve ? 'Review and resolve inspector disputes' : 'View your raised disputes'}
                 </p>
             </div>
 
-            <div className="glass-pane" style={{ overflow: 'auto' }}>
+            {/* Table */}
+            <div className="card overflow-hidden mb-6">
                 {loading ? (
-                    <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading disputes...</p>
+                    <p className="text-center text-gray-500 py-12">Loading disputes...</p>
                 ) : disputes.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '3rem' }}>
-                        <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✨</p>
-                        <p style={{ color: 'var(--text-muted)' }}>No disputes filed yet. All inspections are accepted!</p>
+                    <div className="text-center py-12">
+                        <Scale className="h-10 w-10 text-gray-700 mx-auto mb-3" />
+                        <p className="text-gray-500">No disputes filed yet.</p>
                     </div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr>
-                                {['Shipment', 'Raised By', 'Reason', 'Status', 'Resolved By', 'Date', ...(user.role === 'sender' || user.role === 'admin' ? ['Actions'] : [])].map(h => (
-                                    <th key={h} style={thStyle}>{h}</th>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead><tr className="border-b border-gray-800">
+                                {['Shipment', 'Raised By', 'Reason', 'Status', 'Resolved By', 'Date', ...(canResolve ? ['Actions'] : [])].map(h => (
+                                    <th key={h} className="table-header">{h}</th>
                                 ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {disputes.map(d => (
-                                <tr key={d._id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                    <td style={tdStyle}>
-                                        <code style={{ color: 'var(--accent-primary)' }}>{d.shipment_code || d.shipment_id?.slice(-8)}</code>
-                                    </td>
-                                    <td style={tdStyle}>
-                                        <div>{d.raised_by}</div>
-                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{d.raised_by_company}</div>
-                                    </td>
-                                    <td style={{ ...tdStyle, maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {d.reason}
-                                    </td>
-                                    <td style={tdStyle}>{statusBadge(d.status)}</td>
-                                    <td style={{ ...tdStyle, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{d.resolved_by || '—'}</td>
-                                    <td style={{ ...tdStyle, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                        {d.created_at ? new Date(d.created_at).toLocaleDateString() : '—'}
-                                    </td>
-                                    {(user.role === 'sender' || user.role === 'admin') && (
-                                        <td style={tdStyle}>
-                                            {d.status === 'PENDING' ? (
-                                                <div style={{ display: 'flex', gap: '0.4rem' }}>
-                                                    <button
-                                                        onClick={() => handleResolve(d._id, true)}
-                                                        disabled={resolving === d._id}
-                                                        style={{
-                                                            padding: '0.35rem 0.7rem', borderRadius: 6, border: 'none', cursor: 'pointer',
-                                                            background: 'var(--accent-success)', color: '#000', fontWeight: 600,
-                                                            fontSize: '0.7rem', opacity: resolving === d._id ? 0.5 : 1,
-                                                        }}
-                                                    >✓ Approve</button>
-                                                    <button
-                                                        onClick={() => handleResolve(d._id, false)}
-                                                        disabled={resolving === d._id}
-                                                        style={{
-                                                            padding: '0.35rem 0.7rem', borderRadius: 6, border: 'none', cursor: 'pointer',
-                                                            background: 'rgba(239,68,68,0.15)', color: '#f87171', fontWeight: 600,
-                                                            fontSize: '0.7rem', opacity: resolving === d._id ? 0.5 : 1,
-                                                        }}
-                                                    >✕ Reject</button>
-                                                </div>
-                                            ) : (
-                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Resolved</span>
-                                            )}
+                            </tr></thead>
+                            <tbody className="divide-y divide-gray-800/50">
+                                {disputes.map(d => (
+                                    <tr key={d._id} className="hover:bg-gray-800/30 transition-colors">
+                                        <td className="table-cell">
+                                            <code className="text-xs text-blue-400">{d.shipment_code || d.shipment_id?.slice(-8)}</code>
                                         </td>
-                                    )}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                        <td className="table-cell">
+                                            <p className="text-sm text-gray-300">{d.raised_by}</p>
+                                            <p className="text-[11px] text-gray-600">{d.raised_by_company}</p>
+                                        </td>
+                                        <td className="table-cell max-w-[250px] truncate text-gray-400">{d.reason}</td>
+                                        <td className="table-cell">{statusBadge(d.status)}</td>
+                                        <td className="table-cell text-xs text-gray-500">{d.resolved_by || '—'}</td>
+                                        <td className="table-cell text-xs text-gray-600">{d.created_at ? new Date(d.created_at).toLocaleDateString() : '—'}</td>
+                                        {canResolve && (
+                                            <td className="table-cell">
+                                                {d.status === 'PENDING' ? (
+                                                    <div className="flex gap-1.5">
+                                                        <button onClick={() => handleResolve(d._id, true)}
+                                                            disabled={resolving === d._id}
+                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-semibold
+                                                                       bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors
+                                                                       disabled:opacity-50">
+                                                            <Check className="h-3 w-3" /> Approve
+                                                        </button>
+                                                        <button onClick={() => handleResolve(d._id, false)}
+                                                            disabled={resolving === d._id}
+                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-semibold
+                                                                       bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors
+                                                                       disabled:opacity-50">
+                                                            <X className="h-3 w-3" /> Reject
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-gray-600">Resolved</span>
+                                                )}
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
-            {/* Info Card */}
-            <div className="glass-pane" style={{ marginTop: '1.5rem' }}>
-                <h3 style={{ color: 'var(--text-primary)', marginBottom: '0.75rem', fontSize: '1rem' }}>ℹ️ How Disputes Work</h3>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.8 }}>
-                    <p><strong>1.</strong> Inspector verifies a shipment at the destination and gets a verdict (CLEAN/TAMPERED).</p>
-                    <p><strong>2.</strong> Each inspector gets <strong>1 verification attempt</strong> per shipment.</p>
-                    <p><strong>3.</strong> If they believe the result is incorrect, they can click <strong>"Dispute Result"</strong> on the Verify page.</p>
-                    <p><strong>4.</strong> The dispute is sent to the <strong>sender (shipper)</strong> who can <strong>Approve</strong> or <strong>Reject</strong> it.</p>
-                    <p><strong>5.</strong> If approved, the inspector can re-verify the shipment with a new X-ray scan.</p>
+            {/* How it works */}
+            <div className="card p-6">
+                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                    <Info className="h-4 w-4 text-blue-400" /> How Disputes Work
+                </h3>
+                <div className="space-y-2 text-sm text-gray-400 leading-relaxed">
+                    <p><span className="text-white font-semibold">1.</span> Inspector verifies a shipment at destination and gets a verdict.</p>
+                    <p><span className="text-white font-semibold">2.</span> Each inspector gets <span className="text-white">1 verification attempt</span> per shipment.</p>
+                    <p><span className="text-white font-semibold">3.</span> If incorrect, they can <span className="text-white">raise a dispute</span> on the Verify or Inspections page.</p>
+                    <p><span className="text-white font-semibold">4.</span> The sender can <span className="text-emerald-400">Approve</span> or <span className="text-red-400">Reject</span> the dispute.</p>
+                    <p><span className="text-white font-semibold">5.</span> If approved, the inspector can re-verify with a new scan.</p>
                 </div>
             </div>
         </div>
     );
 }
-
-const thStyle: React.CSSProperties = {
-    textAlign: 'left', padding: '0.6rem 0.8rem', fontSize: '0.7rem',
-    color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-    borderBottom: '1px solid var(--border-subtle)', fontWeight: 600,
-};
-
-const tdStyle: React.CSSProperties = {
-    padding: '0.6rem 0.8rem', fontSize: '0.85rem', color: 'var(--text-primary)',
-};

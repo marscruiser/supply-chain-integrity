@@ -62,7 +62,7 @@ def _detect_duplicated_objects(
     origin_img: np.ndarray,
     dest_img: np.ndarray,
     min_area: int = 50,
-    match_threshold: float = 0.60,
+    match_threshold: float = 0.82,
     nms_overlap: float = 0.3,
 ) -> list:
     """
@@ -334,7 +334,11 @@ async def compare_images(
         explanation_parts = []
 
         # ── Rule 1: Object count changed → item was removed or added ──────────
-        if obj_delta >= 1:
+        # Threshold is 3 instead of 1: contour detection is noisy for X-rays,
+        # and item movement shifts how overlapping objects are segmented,
+        # causing ±1-2 count differences that are NOT actual item removal.
+        OBJ_DELTA_THRESHOLD = 3
+        if obj_delta >= OBJ_DELTA_THRESHOLD:
             final_verdict = "TAMPERED"
             triggered.append("object_count_delta")
             if obj_count_2 > obj_count_1:
@@ -349,9 +353,10 @@ async def compare_images(
                 )
 
         # ── Rule 2: Large histogram shift → material composition changed ──────
-        # A chi² > 5.0 means significant material was removed/added.
-        # Small chi² (< 5.0) with same object count = items just shifted.
-        HIST_TAMPER_THRESHOLD = 5.0
+        # chi² > 12.0 required: X-ray intensity is affected by scan angle,
+        # bag compression, and item overlap — all of which shift histograms
+        # without any tampering. 12.0 catches actual material gain/loss.
+        HIST_TAMPER_THRESHOLD = 12.0
         if hist_chi2 > HIST_TAMPER_THRESHOLD:
             final_verdict = "TAMPERED"
             triggered.append("histogram_shift")
@@ -409,10 +414,13 @@ async def compare_images(
                 balance_ratio = 1.0  # No change at all
 
             # balance_ratio ≈ 1.0 → perfectly balanced (movement)
-            # balance_ratio ≈ 0.0 → completely unbalanced (removal)
-            BALANCE_THRESHOLD = 0.3  # Below this = unbalanced = theft
+            # balance_ratio ≈ 0.0 → completely unbalanced (removal/theft)
+            # 0.25: caught by any scenario where >75% of change is one-directional
+            # (movement gives ~0.7–1.0; theft gives ~0.0–0.2)
+            # min_region_area 200px: catches small items (phone, wallet) being removed.
+            BALANCE_THRESHOLD = 0.25  # Below this = unbalanced = theft
 
-            if balance_ratio < BALANCE_THRESHOLD and max_region_area >= 100:
+            if balance_ratio < BALANCE_THRESHOLD and max_region_area >= 200:
                 final_verdict = "TAMPERED"
                 triggered.append("unbalanced_region_change")
                 explanation_parts.append(
@@ -425,6 +433,12 @@ async def compare_images(
         # ── Rule 5: Object duplication detection via template matching ────────
         # Use RAW images (not preprocessed) — the preprocessing pipeline
         # normalises contrast which hurts template-matching accuracy.
+        #
+        # IMPORTANT: Template matching will find an object in both its OLD and
+        # NEW position when it simply moved — this looks like duplication.
+        # Guard: only treat duplication as TAMPERED if:
+        #   (a) at least one other signal already fired, OR
+        #   (b) 2+ distinct objects are duplicated (very unlikely from movement)
         try:
             raw1 = cv2.imread(path1, cv2.IMREAD_GRAYSCALE)
             raw2 = cv2.imread(path2, cv2.IMREAD_GRAYSCALE)
@@ -435,7 +449,9 @@ async def compare_images(
         except Exception:
             duplicated_objects = []
 
-        if duplicated_objects:
+        # Only fire if corroborated by another signal OR ≥2 objects duplicated
+        other_signals_fired = len(triggered) > 0
+        if duplicated_objects and (other_signals_fired or len(duplicated_objects) >= 2):
             final_verdict = "TAMPERED"
             triggered.append("object_duplication")
             dup_details = "; ".join(

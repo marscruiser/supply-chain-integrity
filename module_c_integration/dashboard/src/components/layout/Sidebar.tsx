@@ -1,6 +1,9 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShieldCheck, Box, Microscope, Activity, Link as LinkIcon, Settings, Hexagon, LogOut, Scale } from 'lucide-react';
+import {
+    LayoutDashboard, ShieldCheck, Box, Microscope, Activity,
+    Link as LinkIcon, Settings, LogOut, Scale, X, Shield
+} from 'lucide-react';
 
 const ALL_NAV = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'sender', 'inspector'] },
@@ -13,11 +16,10 @@ const ALL_NAV = [
     { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const role = user.role || 'inspector';
-
     const visibleNav = ALL_NAV.filter(item => item.roles.includes(role));
 
     const handleLogout = () => {
@@ -27,45 +29,64 @@ export default function Sidebar() {
     };
 
     return (
-        <nav className="sidebar">
-            <div className="sidebar-header">
-                <h1 className="sidebar-title">
-                    <Hexagon size={28} className="text-accent-primary" />
-                    SupplyGuard
-                </h1>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '4px 0 0 36px', fontWeight: 500, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Integrity OS</p>
+        <nav className="flex flex-col h-full bg-gray-900 border-r border-gray-800">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-5 border-b border-gray-800">
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
+                        <Shield className="h-5 w-5 text-blue-400" />
+                    </div>
+                    <div>
+                        <h1 className="text-base font-bold text-white leading-none">SupplyGuard</h1>
+                        <p className="text-[10px] font-medium text-gray-500 uppercase tracking-widest mt-0.5">Integrity OS</p>
+                    </div>
+                </div>
+                {onClose && (
+                    <button onClick={onClose} className="lg:hidden p-1.5 rounded-md hover:bg-gray-800 text-gray-500">
+                        <X className="h-5 w-5" />
+                    </button>
+                )}
             </div>
 
-            <div className="sidebar-nav">
+            {/* Navigation */}
+            <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
                 {visibleNav.map(item => {
                     const Icon = item.icon;
                     return (
                         <NavLink
                             key={item.path}
                             to={item.path}
-                            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                            onClick={onClose}
+                            className={({ isActive }) =>
+                                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                    isActive
+                                        ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20'
+                                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 border border-transparent'
+                                }`
+                            }
                         >
-                            <Icon size={20} strokeWidth={2.5} />
+                            <Icon className="h-[18px] w-[18px] flex-shrink-0" />
                             {item.label}
                         </NavLink>
                     );
                 })}
             </div>
 
-            {/* User info + Logout at bottom */}
-            <div style={{ marginTop: 'auto', padding: '1rem', borderTop: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.email || 'Unknown'}</div>
-                    <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent-primary)' }}>
-                        {user.company || ''} · {role}
+            {/* User Section */}
+            <div className="px-3 py-4 border-t border-gray-800">
+                <div className="flex items-center gap-3 px-3 mb-3">
+                    <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300 uppercase flex-shrink-0">
+                        {(user.email || 'U')[0]}
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-200 truncate">{user.email || 'Unknown'}</p>
+                        <p className="text-[11px] text-gray-500 truncate">{user.company || ''} · {role}</p>
                     </div>
                 </div>
-                <button onClick={handleLogout} style={{
-                    width: '100%', padding: '0.5rem', borderRadius: 6, border: '1px solid var(--border-subtle)',
-                    background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
-                    fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center',
-                }}>
-                    <LogOut size={14} /> Sign Out
+                <button onClick={handleLogout}
+                    className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-gray-500
+                               hover:text-gray-300 hover:bg-gray-800 border border-gray-800 transition-colors">
+                    <LogOut className="h-4 w-4" /> Sign Out
                 </button>
             </div>
         </nav>

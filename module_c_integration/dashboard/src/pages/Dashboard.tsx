@@ -1,68 +1,76 @@
 import React from 'react';
-import { Activity, ShieldCheck, Box, AlertTriangle, Cpu, Globe } from 'lucide-react';
+import { Activity, ShieldCheck, Box, AlertTriangle, Cpu, Globe, ArrowUpRight } from 'lucide-react';
+
+const EARTH_IMAGE = 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?ixlib=rb-4.0.3&auto=format&fit=crop&w=2072&q=80';
 
 const METRICS = [
-    { label: 'Active Shipments', value: '1,284', icon: Box, color: 'var(--accent-primary)' },
-    { label: 'Integrity Score', value: '99.8%', icon: ShieldCheck, color: 'var(--accent-success)' },
-    { label: 'Anomalies Detected', value: '3', icon: AlertTriangle, color: 'var(--accent-danger)' },
-    { label: 'Network Nodes', value: '24', icon: Globe, color: 'var(--accent-purple)' }
+    { label: 'Active Shipments', value: '1,284', icon: Box, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+    { label: 'Integrity Score', value: '99.8%', icon: ShieldCheck, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { label: 'Anomalies Detected', value: '3', icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10' },
+    { label: 'Network Nodes', value: '24', icon: Globe, color: 'text-purple-400', bg: 'bg-purple-500/10' },
 ];
 
 const RECENT_ACTIVITY = [
     { id: 'SHP-9842', time: 'Just now', status: 'CLEAN', hash: '0x8f4d...2a19', route: 'Shanghai → Rotterdam' },
-    { id: 'SHP-9841', time: '2m ago', status: 'CLEAN', hash: '0x3a2c...99b1', route: 'Singapore → Los Angeles' },
+    { id: 'SHP-9841', time: '2m ago', status: 'CLEAN', hash: '0x3a2c...99b1', route: 'Singapore → LA' },
     { id: 'SHP-9840', time: '15m ago', status: 'TAMPERED', hash: '0x1c44...6f3e', route: 'Dubai → Hamburg' },
-    { id: 'SHP-9839', time: '1h ago', status: 'PENDING', hash: 'Awaiting Origin', route: 'Mumbai → New York' },
+    { id: 'SHP-9839', time: '1h ago', status: 'PENDING', hash: 'Awaiting', route: 'Mumbai → New York' },
 ];
 
 export default function Dashboard() {
     return (
-        <div className="page">
-            <div className="page-header">
-                <h1 className="page-title">Global Overview</h1>
-                <p className="page-subtitle">Real-time supply chain telemetry & cryptographic verification</p>
+        <div className="p-4 lg:p-6 max-w-7xl mx-auto animate-fade-in">
+            {/* Hero Banner with Earth */}
+            <div className="relative rounded-2xl overflow-hidden mb-6 h-48 sm:h-56">
+                <img src={EARTH_IMAGE} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-r from-gray-950 via-gray-950/80 to-transparent" />
+                <div className="relative z-10 flex flex-col justify-center h-full px-6 sm:px-8">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white">Global Overview</h1>
+                    <p className="text-gray-400 text-sm sm:text-base mt-1">Real-time supply chain telemetry & verification</p>
+                </div>
             </div>
 
-            <div className="dashboard-grid">
-                {/* Top KPI Metrics */}
-                {METRICS.map(metric => {
-                    const Icon = metric.icon;
+            {/* KPI Metrics */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                {METRICS.map(m => {
+                    const Icon = m.icon;
                     return (
-                        <div key={metric.label} className="col-span-3 glass-pane interactive-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span className="metric-label">
-                                    {metric.label}
-                                </span>
-                                <div style={{ width: 40, height: 40, borderRadius: '12px', background: `color-mix(in srgb, ${metric.color} 15%, transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: metric.color }}>
-                                    <Icon size={20} />
+                        <div key={m.label} className="card p-5 hover:border-gray-700 transition-colors">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{m.label}</span>
+                                <div className={`w-9 h-9 rounded-lg ${m.bg} flex items-center justify-center ${m.color}`}>
+                                    <Icon className="h-4 w-4" />
                                 </div>
                             </div>
-                            <div className="metric-value">{metric.value}</div>
+                            <div className="text-2xl sm:text-3xl font-bold text-white">{m.value}</div>
                         </div>
                     );
                 })}
+            </div>
 
-                {/* Main Neural/Blockchain Feed */}
-                <div className="col-span-8 glass-pane">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h2 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <Cpu size={20} className="text-accent-primary" />
-                            Live Verification Feed
+            {/* Feed + Health */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Live Feed */}
+                <div className="lg:col-span-2 card p-6">
+                    <div className="flex items-center justify-between mb-5">
+                        <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                            <Cpu className="h-4 w-4 text-blue-400" /> Live Verification Feed
                         </h2>
-                        <div className="status-indicator">
-                            <span className="status-dot" style={{ animationDuration: '1s' }} />
-                            Syncing Ledger
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-dot" />
+                            Syncing
                         </div>
                     </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div className="space-y-2">
                         {RECENT_ACTIVITY.map(act => (
-                            <div key={act.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 2fr 1fr 1fr', alignItems: 'center', padding: '1rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
-                                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{act.id}</span>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{act.time}</span>
-                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontFamily: 'monospace' }}>{act.hash}</span>
-                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{act.route}</span>
-                                <div style={{ textAlign: 'right' }}>
+                            <div key={act.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors">
+                                <div className="flex items-center gap-4 min-w-0">
+                                    <span className="text-sm font-semibold text-white whitespace-nowrap">{act.id}</span>
+                                    <span className="text-xs text-gray-500 hidden sm:inline">{act.time}</span>
+                                    <code className="text-xs text-gray-500 font-mono hidden md:inline">{act.hash}</code>
+                                </div>
+                                <div className="flex items-center gap-3 flex-shrink-0">
+                                    <span className="text-xs text-gray-400 hidden sm:inline">{act.route}</span>
                                     <span className={`badge badge-${act.status.toLowerCase()}`}>{act.status}</span>
                                 </div>
                             </div>
@@ -70,44 +78,27 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* System Integrity Map/Widget placeholder */}
-                <div className="col-span-4 glass-pane" style={{ display: 'flex', flexDirection: 'column' }}>
-                    <h2 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                        <Activity size={20} className="text-accent-primary" />
-                        System Health
+                {/* System Health */}
+                <div className="card p-6">
+                    <h2 className="text-base font-semibold text-white flex items-center gap-2 mb-5">
+                        <Activity className="h-4 w-4 text-blue-400" /> System Health
                     </h2>
-
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2rem' }}>
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                                <span className="text-secondary">AI Vision Cluster</span>
-                                <span className="text-success" style={{ color: 'var(--accent-success)' }}>Operational</span>
+                    <div className="space-y-5">
+                        {[
+                            { name: 'AI Vision Cluster', status: 'Operational', pct: 94, color: 'bg-emerald-400', statusColor: 'text-emerald-400' },
+                            { name: 'IPFS Storage Node', status: 'Operational', pct: 100, color: 'bg-blue-400', statusColor: 'text-emerald-400' },
+                            { name: 'Smart Contract RPC', status: 'Slight Latency', pct: 78, color: 'bg-amber-400', statusColor: 'text-amber-400' },
+                        ].map(s => (
+                            <div key={s.name}>
+                                <div className="flex justify-between mb-2 text-sm">
+                                    <span className="text-gray-400">{s.name}</span>
+                                    <span className={`text-xs font-medium ${s.statusColor}`}>{s.status}</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                    <div className={`h-full ${s.color} rounded-full transition-all`} style={{ width: `${s.pct}%` }} />
+                                </div>
                             </div>
-                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: '94%', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-success))' }} />
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                                <span className="text-secondary">IPFS Storage Node</span>
-                                <span className="text-success" style={{ color: 'var(--accent-success)' }}>Operational</span>
-                            </div>
-                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: '100%', background: 'var(--accent-primary)' }} />
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                                <span className="text-secondary">Smart Contract RPC</span>
-                                <span className="text-warning" style={{ color: 'var(--accent-warning)' }}>Slight Latency</span>
-                            </div>
-                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: '78%', background: 'var(--accent-warning)' }} />
-                            </div>
-                        </div>
-
+                        ))}
                     </div>
                 </div>
             </div>

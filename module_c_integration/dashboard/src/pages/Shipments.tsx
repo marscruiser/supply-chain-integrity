@@ -1,43 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { Plus, Box, Search, ArrowRight } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-
 function getToken() { return localStorage.getItem('token') || ''; }
 function authHeaders(): Record<string, string> { return { Authorization: `Bearer ${getToken()}` }; }
 
-interface Shipment {
-    _id: string;
-    shipment_code: string;
-    description: string;
-    status: string;
-    company: string;
-    receiver_company: string;
-    blockchain_id: number;
-    register_tx: string;
-    created_at: string;
-}
-
 export default function Shipments() {
     const navigate = useNavigate();
-    const [shipments, setShipments] = useState<Shipment[]>([]);
+    const [shipments, setShipments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [showForm, setShowForm] = useState(false);
-    const [code, setCode] = useState('');
-    const [desc, setDesc] = useState('');
-    const [receiver, setReceiver] = useState('');
+    const [showCreate, setShowCreate] = useState(false);
+    const [newCode, setNewCode] = useState('');
+    const [newDesc, setNewDesc] = useState('');
+    const [newReceiver, setNewReceiver] = useState('');
     const [creating, setCreating] = useState(false);
-
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const [search, setSearch] = useState('');
 
     const fetchShipments = useCallback(async () => {
+        setLoading(true);
         try {
             const res = await fetch(`${API_BASE}/shipments/?limit=100`, { headers: authHeaders() });
-            if (res.ok) {
-                const data = await res.json();
-                setShipments(data.shipments || []);
-            }
+            if (res.ok) { const data = await res.json(); setShipments(data.shipments || []); }
         } catch { /* ignore */ }
         setLoading(false);
     }, []);
@@ -46,152 +31,105 @@ export default function Shipments() {
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!code.trim()) { toast.error('Shipment code is required'); return; }
         setCreating(true);
         try {
             const res = await fetch(`${API_BASE}/shipments/`, {
-                method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ shipment_code: code, description: desc, receiver_company: receiver }),
+                method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shipment_code: newCode, description: newDesc, receiver_company: newReceiver }),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || 'Failed to create');
-            toast.success(`Shipment ${code} registered!`);
-            setShowForm(false);
-            setCode(''); setDesc(''); setReceiver('');
+            if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Failed'); }
+            toast.success('Shipment created!');
+            setShowCreate(false); setNewCode(''); setNewDesc(''); setNewReceiver('');
             fetchShipments();
-        } catch (err: any) {
-            toast.error(err.message);
-        }
+        } catch (err: any) { toast.error(err.message); }
         setCreating(false);
     };
 
-    const statusColor = (s: string) => {
-        switch (s) {
-            case 'REGISTERED': return { bg: 'rgba(56,189,248,0.1)', color: '#38bdf8', border: 'rgba(56,189,248,0.2)' };
-            case 'ORIGIN_SCANNED': return { bg: 'rgba(139,92,246,0.1)', color: '#a78bfa', border: 'rgba(139,92,246,0.2)' };
-            case 'VERIFIED': return { bg: 'rgba(16,185,129,0.1)', color: '#34d399', border: 'rgba(16,185,129,0.2)' };
-            case 'TAMPERED': return { bg: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'rgba(239,68,68,0.2)' };
-            default: return { bg: 'rgba(255,255,255,0.05)', color: '#94a3b8', border: 'rgba(255,255,255,0.1)' };
-        }
+    const filtered = shipments.filter(s =>
+        s.shipment_code?.toLowerCase().includes(search.toLowerCase()) ||
+        s.description?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const statusBadge = (s: string) => {
+        const map: Record<string, string> = {
+            'REGISTERED': 'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20',
+            'ORIGIN_SCANNED': 'bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/20',
+            'VERIFIED': 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20',
+            'TAMPERED': 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20',
+            'DISPUTED': 'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20',
+        };
+        return <span className={`badge ${map[s] || 'bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/20'}`}>{s}</span>;
     };
 
     return (
-        <div className="page">
-            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div className="p-4 lg:p-6 max-w-7xl mx-auto animate-fade-in">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div>
-                    <h1 className="page-title">📦 Shipments</h1>
-                    <p className="page-subtitle">
-                        {user.role === 'admin' ? 'All company shipments' : `${user.company} shipments`}
-                    </p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-white">Shipments</h1>
+                    <p className="text-sm text-gray-500 mt-1">{shipments.length} total shipments</p>
                 </div>
-                {(user.role === 'sender' || user.role === 'admin') && (
-                    <button onClick={() => setShowForm(!showForm)} style={{
-                        padding: '0.7rem 1.5rem', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-purple))',
-                        color: '#000', fontWeight: 700, fontSize: '0.9rem',
-                    }}>
-                        {showForm ? '✕ Cancel' : '+ New Shipment'}
-                    </button>
-                )}
+                <button onClick={() => setShowCreate(!showCreate)}
+                    className="btn-primary flex items-center gap-2 self-start">
+                    <Plus className="h-4 w-4" /> New Shipment
+                </button>
             </div>
 
             {/* Create Form */}
-            {showForm && (
-                <div className="glass-pane" style={{ marginBottom: '1.5rem' }}>
-                    <h3 style={{ color: 'var(--accent-primary)', marginBottom: '1rem' }}>Register New Shipment</h3>
-                    <form onSubmit={handleCreate} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '1rem', alignItems: 'end' }}>
-                        <div>
-                            <label style={labelStyle}>Shipment Code *</label>
-                            <input value={code} onChange={e => setCode(e.target.value)} placeholder="SHP-IPHONE-001"
-                                required style={inputStyle} />
-                        </div>
-                        <div>
-                            <label style={labelStyle}>Description</label>
-                            <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="500x iPhone 15 Pro"
-                                style={inputStyle} />
-                        </div>
-                        <div>
-                            <label style={labelStyle}>Receiver Company</label>
-                            <input value={receiver} onChange={e => setReceiver(e.target.value)} placeholder="BestBuy"
-                                style={inputStyle} />
-                        </div>
-                        <button type="submit" disabled={creating} style={{
-                            padding: '0.75rem 1.5rem', borderRadius: 8, border: 'none', cursor: 'pointer',
-                            background: 'var(--accent-success)', color: '#000', fontWeight: 700,
-                            opacity: creating ? 0.5 : 1,
-                        }}>{creating ? '⏳' : '✓ Register'}</button>
-                    </form>
-                </div>
+            {showCreate && (
+                <form onSubmit={handleCreate} className="card p-6 mb-6 animate-fade-in">
+                    <h3 className="text-sm font-semibold text-white mb-4">Create New Shipment</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div><label className="label">Shipment Code</label><input value={newCode} onChange={e => setNewCode(e.target.value)} required placeholder="SHP-001" className="input" /></div>
+                        <div><label className="label">Description</label><input value={newDesc} onChange={e => setNewDesc(e.target.value)} required placeholder="Electronics shipment" className="input" /></div>
+                        <div><label className="label">Receiver Company</label><input value={newReceiver} onChange={e => setNewReceiver(e.target.value)} placeholder="BestBuy" className="input" /></div>
+                    </div>
+                    <div className="flex gap-3 mt-4">
+                        <button type="submit" disabled={creating} className="btn-primary">{creating ? 'Creating...' : 'Create'}</button>
+                        <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
+                    </div>
+                </form>
             )}
 
+            {/* Search */}
+            <div className="relative mb-4 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search shipments..."
+                    className="input pl-9" />
+            </div>
+
             {/* Table */}
-            <div className="glass-pane" style={{ overflow: 'auto' }}>
+            <div className="card overflow-hidden">
                 {loading ? (
-                    <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading...</p>
-                ) : shipments.length === 0 ? (
-                    <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No shipments yet. Create one above.</p>
+                    <div className="p-12 text-center text-gray-500">Loading...</div>
+                ) : filtered.length === 0 ? (
+                    <div className="p-12 text-center text-gray-500">No shipments found.</div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr>
-                                {['Code', 'Description', 'Company', 'Receiver', 'Status', 'Blockchain ID', 'Created'].map(h => (
-                                    <th key={h} style={{
-                                        textAlign: 'left', padding: '0.75rem 1rem', fontSize: '0.75rem',
-                                        color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-                                        borderBottom: '1px solid var(--border-subtle)', fontWeight: 600,
-                                    }}>{h}</th>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead><tr className="border-b border-gray-800">
+                                {['Code', 'Description', 'Status', 'Company', 'Receiver', 'Created', ''].map(h => (
+                                    <th key={h} className="table-header">{h}</th>
                                 ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {shipments.map(s => {
-                                const sc = statusColor(s.status);
-                                return (
-                                    <tr key={s._id} onClick={() => navigate(`/shipments/${s._id}`)} style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.background = 'rgba(56,189,248,0.04)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                        <td style={cellStyle}>
-                                            <code style={{ color: 'var(--accent-primary)' }}>{s.shipment_code}</code>
-                                        </td>
-                                        <td style={cellStyle}>{s.description || '—'}</td>
-                                        <td style={cellStyle}>{s.company}</td>
-                                        <td style={cellStyle}>{s.receiver_company || '—'}</td>
-                                        <td style={cellStyle}>
-                                            <span style={{
-                                                padding: '0.2rem 0.6rem', borderRadius: 9999, fontSize: '0.7rem',
-                                                fontWeight: 600, background: sc.bg, color: sc.color,
-                                                border: `1px solid ${sc.border}`,
-                                            }}>{s.status}</span>
-                                        </td>
-                                        <td style={cellStyle}>
-                                            <code style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                                #{s.blockchain_id || '—'}
-                                            </code>
-                                        </td>
-                                        <td style={{ ...cellStyle, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                            {s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}
-                                        </td>
+                            </tr></thead>
+                            <tbody className="divide-y divide-gray-800/50">
+                                {filtered.map(s => (
+                                    <tr key={s._id} onClick={() => navigate(`/shipments/${s._id}`)}
+                                        className="hover:bg-gray-800/30 cursor-pointer transition-colors">
+                                        <td className="table-cell font-medium text-white">{s.shipment_code}</td>
+                                        <td className="table-cell text-gray-400 max-w-[200px] truncate">{s.description || '—'}</td>
+                                        <td className="table-cell">{statusBadge(s.status || 'REGISTERED')}</td>
+                                        <td className="table-cell text-gray-400">{s.company || '—'}</td>
+                                        <td className="table-cell text-gray-400">{s.receiver_company || '—'}</td>
+                                        <td className="table-cell text-gray-500 text-xs">{s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
+                                        <td className="table-cell"><ArrowRight className="h-4 w-4 text-gray-600" /></td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
         </div>
     );
 }
-
-const labelStyle: React.CSSProperties = {
-    display: 'block', color: 'var(--text-secondary)', fontSize: '0.75rem',
-    fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4,
-};
-
-const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '0.7rem 0.9rem', borderRadius: 8,
-    border: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.04)',
-    color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none',
-};
-
-const cellStyle: React.CSSProperties = {
-    padding: '0.75rem 1rem', fontSize: '0.9rem', color: 'var(--text-primary)',
-};

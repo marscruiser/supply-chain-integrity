@@ -167,9 +167,13 @@ async def verify_destination(
     if not shipment:
         raise HTTPException(404, "Shipment not found")
 
-    # ── Verify count limit: 1 attempt, then must dispute ──────────────────
+    # ── Verify count limit: 1 attempt per inspector per shipment ─────────────
     verify_counts = db["verify_counts"]
-    count_doc = await verify_counts.find_one({"shipment_id": shipment_id})
+    inspector_email = user["email"]
+    count_doc = await verify_counts.find_one({
+        "shipment_id": shipment_id,
+        "inspector_email": inspector_email,
+    })
     current_count = count_doc["count"] if count_doc else 0
 
     if current_count >= 1:
@@ -265,10 +269,10 @@ async def verify_destination(
     new_status = "TAMPERED" if verdict == "TAMPERED" else "VERIFIED"
     await shipment_repo.update_status(shipment_id, new_status)
 
-    # Increment verify count (1 attempt per shipment unless dispute approved)
+    # Increment verify count — keyed per inspector, per shipment
     await verify_counts.update_one(
-        {"shipment_id": shipment_id},
-        {"$inc": {"count": 1}, "$setOnInsert": {"shipment_id": shipment_id}},
+        {"shipment_id": shipment_id, "inspector_email": inspector_email},
+        {"$inc": {"count": 1}, "$setOnInsert": {"shipment_id": shipment_id, "inspector_email": inspector_email}},
         upsert=True,
     )
 
